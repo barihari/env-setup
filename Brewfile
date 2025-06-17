@@ -1,0 +1,6 @@
+tap "homebrew/bundle"
+brew "git"
+brew "node"
+brew "pnpm"
+brew "yarn"
+brew "ghostty"

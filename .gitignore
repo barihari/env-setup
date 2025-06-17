@@ -1,0 +1,13 @@
+# macOS system files
+.DS_Store
+
+# Node and package artifacts
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.*
