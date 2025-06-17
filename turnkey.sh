@@ -14,7 +14,7 @@ fi
 # SYSTEM PREP
 # 1. Installs Xcode CLI Tools
 # 2. Installs Homebrew (if missing)
-# 3. Runs your Brewfile to install CLI tools (e.g. ghostty)
+# 3. Runs your Brewfile to install CLI tools (e.g., ghostty, docker, colima)
 #
 # SHELL CONFIGURATION
 # 4. Installs Oh My Zsh and sets Zsh plugins
@@ -41,6 +41,11 @@ fi
 #
 # CURSOR CLI INTEGRATION
 # 12. Links the Cursor CLI (if available) and adds a 'c' alias for launching it from terminal
+#
+# COLIMA SETUP
+# 13. Installs Docker CLI and Colima but does not auto-start Colima.
+#     Prompts user to manually run 'colima start' if needed by the project.
+
 
 ### SYSTEM PREP ###
 ### SYSTEM PREP ###
@@ -195,6 +200,24 @@ if ! grep -q "alias c=" "$ZSHRC"; then
   echo "alias c='cursor'" >> "$ZSHRC"
   echo "Added alias 'c' for Cursor to .zshrc"
 fi
+
+### INSTALL COLIMA + DOCKER CLI ###
+
+# Colima provides a Docker-compatible container runtime without Docker Desktop
+# Docker CLI is required separately to use `docker` commands
+
+# This is installed via Brewfile. We do NOT auto-start Colima.
+# Projects that need it will prompt the user via Cursor or README instructions.
+if ! command -v colima &> /dev/null; then
+  echo "Colima not found. Make sure 'brew install colima docker' ran successfully."
+fi
+
+if ! command -v docker &> /dev/null; then
+  echo "Docker CLI not found. Check that 'brew install docker' completed."
+fi
+
+echo "Colima and Docker CLI are installed, but Colima is not running by default."
+echo "Run 'colima start' when a project requires containers."
 
 
 ### DONE ###
