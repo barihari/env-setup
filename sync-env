@@ -1,0 +1,8 @@
+#!/bin/zsh
+
+echo "🔧 Running all patches in ./patches"
+
+for patch in ./patches/*.sh; do
+  echo "▶️  Running shell patch: $patch"
+  zsh "$patch"
+done

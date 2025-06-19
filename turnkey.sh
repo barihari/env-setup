@@ -1,4 +1,6 @@
-# turnkey.sh - Version 1.0.0
+#!/bin/zsh
+# turnkey.sh - Version 1.0.1
+
 echo "⚠️  This script will install tools and make system changes on your Mac."
 echo "Do you want to continue? (y/n)"
 read -r confirm
@@ -7,47 +9,23 @@ if [[ "$confirm" != "y" ]]; then
   exit 1
 fi
 
-# === Turnkey Setup Script Overview ===
-# turnkey.sh - Version 1.0.0
-# This script sets up your entire dev environment from scratch on a new Mac:
-#
-# SYSTEM PREP
-# 1. Installs Xcode CLI Tools
-# 2. Installs Homebrew (if missing)
-# 3. Runs your Brewfile to install CLI tools (e.g., ghostty, docker, colima)
-#
-# SHELL CONFIGURATION
-# 4. Installs Oh My Zsh and sets Zsh plugins
-#
-# SSH SETUP
-# 5. Creates ~/.ssh, installs your SSH keys, and sets up ssh-agent + GitHub config
-#
-# ENV VARIABLES
-# 6. Creates a .env file (if missing), loads it, and links to your .zshrc
-#
-# NODE/NVM
-# 7. Warns if no .nvmrc exists in a Node project
-#
-# PROJECT BOILERPLATE
-# 8. Adds a 'starter' alias that clones your my-starter repo into ~/sites/project-name,
-#    sets the upstream, enters the folder, and pulls latest updates
-#
-# CLI TOOLING
-# 9. Installs pnpm and yarn globally
-#
-# ZSH AUTOMATION
-# 10. Adds autoload logic to .zshrc for switching Node versions based on .nvmrc
-# 11. Adds a 'go' alias to pull upstream updates into any project cloned from my-starter
-#
-# CURSOR CLI INTEGRATION
-# 12. Links the Cursor CLI (if available) and adds a 'c' alias for launching it from terminal
-#
-# COLIMA SETUP
-# 13. Installs Docker CLI and Colima but does not auto-start Colima.
-#     Prompts user to manually run 'colima start' if needed by the project.
+ZSHRC="$HOME/.zshrc"
+# Helper to safely add content to .zshrc without duplication
+append_to_zshrc_once() {
+  local label="$1"
+  local block="$2"
+  if ! grep -q "$label" "$ZSHRC"; then
+    echo "$block" >> "$ZSHRC"
+    echo "✅ Added $label to .zshrc"
+  else
+    echo "ℹ️  $label already exists in .zshrc. Skipping."
+  fi
+}
 
 
-### SYSTEM PREP ###
+SITES_DIR="$HOME/sites"
+TARGET_STARTER="$SITES_DIR/my-starter"
+
 ### SYSTEM PREP ###
 
 # 1. Install Xcode Command Line Tools
@@ -61,21 +39,29 @@ else
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
-# 3. Run Brewfile to install CLI tools and apps
+# 3. Ensure /opt/homebrew/bin is in PATH
+if [[ ":$PATH:" != *":/opt/homebrew/bin:"* ]]; then
+  echo 'export PATH="/opt/homebrew/bin:$PATH"' >> "$ZSHRC"
+  export PATH="/opt/homebrew/bin:$PATH"
+  echo "✅ Added /opt/homebrew/bin to PATH and updated .zshrc"
+fi
+
+# 4. Run Brewfile to install CLI tools
 echo "Running Brewfile to install CLI tools..."
-brew bundle --file=./Brewfile
+brew bundle --file=./Brewfile --verbose
 
 ### SHELL CONFIGURATION ###
 
 echo "Installing Oh My Zsh..."
 
-# 4. Install Oh My Zsh if not present
+# 6. Install Oh My Zsh if not present
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
-  sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+  echo "Installing Oh My Zsh without modifying your .zshrc..."
+  RUNZSH=no KEEP_ZSHRC=yes \
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 fi
 
-# 5. Enable common Oh My Zsh plugins
-ZSHRC="$HOME/.zshrc"
+# 7. Enable common Oh My Zsh plugins
 if ! grep -q "plugins=(git node yarn npm" "$ZSHRC"; then
   sed -i '' 's/plugins=(.*)/plugins=(git node yarn npm zsh-autosuggestions zsh-syntax-highlighting)/' "$ZSHRC"
 fi
@@ -84,7 +70,7 @@ fi
 
 echo "Setting up SSH config..."
 
-# 6. Create SSH folder and config
+# 8. Create SSH folder and install keys
 mkdir -p ~/.ssh
 cp ./id_ed25519 ~/.ssh/id_ed25519
 cp ./id_ed25519.pub ~/.ssh/id_ed25519.pub
@@ -100,17 +86,17 @@ Host github.com
   UseKeychain yes
 EOF
 
-# 7. Add key to macOS Keychain
+# 9. Add key to macOS Keychain
 ssh-add --apple-use-keychain ~/.ssh/id_ed25519
 
-# 8. Test GitHub auth
+# 10. Test GitHub auth
 ssh -T git@github.com
 
 ### ENVIRONMENT VARIABLES ###
 
 echo "Checking for .env file..."
 
-# 9. Create or update .env securely
+# 11. Create or update .env securely
 if [ ! -f ~/.env ]; then
   cat <<EOF2 > ~/.env
 # Add your API tokens below
@@ -121,10 +107,10 @@ EOF2
   echo "Created starter ~/.env file."
 fi
 
-# 10. Load environment variables now
+# 12. Load environment variables now
 export $(grep -v '^#' ~/.env | xargs)
 
-# 11. Link env loading to .zshrc if not already linked
+# 13. Link env loading to .zshrc
 if ! grep -q "source ~/.env" "$ZSHRC"; then
   echo "[ -f ~/.env ] && export \$(grep -v '^#' ~/.env | xargs)" >> "$ZSHRC"
   echo "Linked .env to .zshrc"
@@ -132,37 +118,56 @@ fi
 
 ### NVM + NODE VERSION CHECK ###
 
-# 12. Warn if inside a Node project and .nvmrc is missing
+# 14. Warn if inside a Node project and .nvmrc is missing
 if [ -f package.json ] && [ ! -f .nvmrc ]; then
   echo "Detected a Node project without an .nvmrc file. Create one to pin your Node version:"
-  echo "    echo "18" > .nvmrc && nvm install"
+  echo "    echo '18' > .nvmrc && nvm install"
 fi
-
 ### STARTER PROJECT TEMPLATE ###
 
-echo "Cloning your my-starter boilerplate into ~/sites..."
-
-# 13. Clone boilerplate into ~/sites/my-starter
-SITES_DIR="$HOME/sites"
-TARGET_STARTER="$SITES_DIR/my-starter"
+echo "📦 Setting up latest my-starter in ~/sites..."
 
 mkdir -p "$SITES_DIR"
+
+if [ -d "$TARGET_STARTER" ]; then
+  echo "🗑  Removing existing $TARGET_STARTER"
+  rm -rf "$TARGET_STARTER"
+fi
+
+echo "📥 Cloning fresh my-starter from GitHub..."
 git clone git@github.com:barihari/my-starter.git "$TARGET_STARTER"
-echo "Cloned starter project into ~/sites/my-starter via SSH."
+echo "✅ Cloned my-starter into $TARGET_STARTER"
+
+# Add 'starter' function to .zshrc
+append_to_zshrc_once "# === starter function ===" '
+# === starter function ===
+starter() {
+  if [ -z "$1" ]; then
+    echo "❌ Usage: starter project-name"
+    return 1
+  fi
+  mkdir -p "$HOME/sites/$1"
+  cp -R "$HOME/sites/my-starter/." "$HOME/sites/$1"
+  cd "$HOME/sites/$1" || return
+  git init
+  git remote add origin git@github.com:barihari/$1.git
+  echo "✅ Project $1 created at ~/sites/$1"
+}
+'
 
 ### CLI TOOLING ###
 
-echo "Installing global CLI tools (pnpm, yarn)..."
+echo "Installing CLI tools (pnpm, yarn) via Homebrew..."
 
-# 14. Install pnpm and yarn globally
-npm install -g pnpm
-npm install -g yarn
+# 16. Use Homebrew to install pnpm and yarn to avoid EEXIST errors
+brew install pnpm
+brew install yarn
 
 ### ZSHRC: AUTO-LOAD .NVMRC ###
 
 echo "Setting up auto-nvm use behavior in .zshrc..."
 
-# 15. Add auto-nvm use behavior to .zshrc
+# 17. Add .nvmrc auto-use logic
 if ! grep -q "load-nvmrc" "$ZSHRC"; then
   cat <<'EOF3' >> "$ZSHRC"
 
@@ -181,9 +186,34 @@ EOF3
   echo "Added auto-nvm use logic to .zshrc"
 fi
 
+echo "Would you like to manually install nvm for Node version management? (y/n)"
+read -r install_nvm
+if [[ "$install_nvm" == "y" ]]; then
+  export NVM_DIR="$HOME/.nvm"
+  if [ ! -d "$NVM_DIR" ]; then
+    echo "Installing nvm manually..."
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+
+    # Add to .zshrc if not already present
+    if ! grep -q 'export NVM_DIR="$HOME/.nvm"' "$ZSHRC"; then
+      echo 'export NVM_DIR="$HOME/.nvm"' >> "$ZSHRC"
+      echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> "$ZSHRC"
+      echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> "$ZSHRC"
+      echo "Linked nvm to .zshrc"
+    fi
+
+    echo "✅ nvm installed and configured."
+  else
+    echo "nvm already installed. Skipping."
+  fi
+else
+  echo "⚠️  Skipping nvm install. You can always install it manually with:"
+  echo "    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash"
+fi
+
 ### INSTALL CURSOR CLI SHORTCUT ###
 
-# Attempt to link Cursor CLI for Apple Silicon systems
+# 18. Link Cursor CLI for Apple Silicon systems
 if [ -f "/Applications/Cursor.app/Contents/Resources/app/bin/cursor" ]; then
   if [ ! -f "/opt/homebrew/bin/cursor" ]; then
     echo "Linking Cursor CLI to /opt/homebrew/bin/cursor..."
@@ -195,19 +225,19 @@ else
   echo "Cursor CLI binary not found at expected location."
 fi
 
-# Add short alias 'c' for launching Cursor
+# 19. Add 'c' alias for launching Cursor
 if ! grep -q "alias c=" "$ZSHRC"; then
   echo "alias c='cursor'" >> "$ZSHRC"
-  echo "Added alias 'c' for Cursor to .zshrc"
+  append_to_zshrc_once "# === Cursor alias ===" '
+# === Cursor alias ===
+alias c="cursor"
+'
+echo "Added alias 'c' for Cursor to .zshrc"
 fi
 
-### INSTALL COLIMA + DOCKER CLI ###
+### COLIMA + DOCKER ###
 
-# Colima provides a Docker-compatible container runtime without Docker Desktop
-# Docker CLI is required separately to use `docker` commands
-
-# This is installed via Brewfile. We do NOT auto-start Colima.
-# Projects that need it will prompt the user via Cursor or README instructions.
+# 20. Verify Colima and Docker CLI installs
 if ! command -v colima &> /dev/null; then
   echo "Colima not found. Make sure 'brew install colima docker' ran successfully."
 fi
@@ -219,8 +249,18 @@ fi
 echo "Colima and Docker CLI are installed, but Colima is not running by default."
 echo "Run 'colima start' when a project requires containers."
 
-
 ### DONE ###
-echo "Full dev environment is ready to go. Open Ghostty and start coding."
-echo "Use 'starter project-name' to start a fresh coding project."
-echo "Use 'c .' to launch Cursor in the current folder."
+echo "Reloading .zshrc for immediate use..."
+source "$ZSHRC"
+
+# Apply all patches (catch-all loop)
+for patch in ./patches/*.sh; do
+  zsh "$patch"
+done
+
+# Final output
+source "$ZSHRC"
+echo "✅ Full dev environment is ready."
+echo "✅ All patches applied successfully."
+echo "➡️  Use 'starter project-name' to scaffold a new project."
+echo "➡️  Use 'c .' to launch Cursor in the current folder."
